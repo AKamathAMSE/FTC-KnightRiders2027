@@ -45,7 +45,7 @@ import java.util.List;
 
 @Config
 @TeleOp(name = "LimelightTesting")
-public class LimelightTesting extends LinearOpMode {
+public class Limelight_Testing extends LinearOpMode {
     private DcMotorEx LB, LF, RB, RF;
     private Servo Gate;
     private DcMotorEx Shooterl, Shooterr;
