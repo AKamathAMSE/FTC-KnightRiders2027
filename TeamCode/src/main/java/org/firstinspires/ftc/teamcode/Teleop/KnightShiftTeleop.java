@@ -5,33 +5,34 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.Range;
 
 @Config
 @TeleOp(name = "KnightShiftTeleop")
 public class KnightShiftTeleop extends LinearOpMode {
     private DcMotorEx LB, LF, RB, RF;
-    private Servo FS;
-    private DcMotorEx Shooterl, Shooterr;
-    private DcMotorEx Intakel, Intaker;
-    private Servo Arm;
+    private DcMotorEx Shooter, Intake;
 
     double lbPower, lfPower, rbPower, rfPower;
-    double slPower, srPower, ilPower, irPower;
 
-    public static double ARM_POS_1 = 0.482;
-    public static double ARM_POS_2 = 0.4928;
-    public static double ARM_POS_3 = 0.5036;
-    public static double armTarget = 0.0;
+    public static double SHOOTER_RPM = 2000.0;
+    public static double INTAKE_RPM = 800.0;
+    public static double SHOOTER_TICKS_PER_REV = 28.0;
+    public static double INTAKE_TICKS_PER_REV = 28.0;
 
-    // PID Coefficients for Shooter (Tune these in FTC Dashboard)
     public static double shooterP = 0.001;
     public static double shooterI = 0.0;
     public static double shooterD = 0.0;
-    public static double shooterF = 0.0; // Feedforward term
+    public static double shooterF = 0.0;
+
+    public static double intakeP = 0.001;
+    public static double intakeI = 0.0;
+    public static double intakeD = 0.0;
+    public static double intakeF = 0.0;
 
     private double targetShooterVelocity = 0.0;
+    private double targetIntakeVelocity = 0.0;
 
     @Override
     public void runOpMode() {
@@ -41,40 +42,32 @@ public class KnightShiftTeleop extends LinearOpMode {
         LF = hardwareMap.get(DcMotorEx.class, "LF");
         RB = hardwareMap.get(DcMotorEx.class, "RB");
         RF = hardwareMap.get(DcMotorEx.class, "RF");
-        Arm = hardwareMap.get(Servo.class, "Arm");
-        Intakel = hardwareMap.get(DcMotorEx.class, "Intakel");
-        Intaker = hardwareMap.get(DcMotorEx.class, "Intaker");
-        Shooterr = hardwareMap.get(DcMotorEx.class, "Shooterr");
-        Shooterl = hardwareMap.get(DcMotorEx.class, "Shooterl");
+        Shooter = hardwareMap.get(DcMotorEx.class, "Shooter");
+        Intake = hardwareMap.get(DcMotorEx.class, "Intake");
 
         LB.setDirection(DcMotor.Direction.REVERSE);
         LF.setDirection(DcMotor.Direction.REVERSE);
         RB.setDirection(DcMotor.Direction.REVERSE);
         RF.setDirection(DcMotor.Direction.REVERSE);
-        Intakel.setDirection(DcMotor.Direction.FORWARD);
-        Intaker.setDirection(DcMotor.Direction.REVERSE);
-        Shooterl.setDirection(DcMotor.Direction.FORWARD);
-        Shooterr.setDirection(DcMotor.Direction.REVERSE);
-        Arm.setDirection(Servo.Direction.FORWARD);
+        Shooter.setDirection(DcMotor.Direction.FORWARD);
+        Intake.setDirection(DcMotor.Direction.FORWARD);
 
         LB.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         LF.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         RB.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         RF.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        Intakel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        Intaker.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        Shooterl.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        Shooterr.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        Shooter.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        Intake.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
 
         LB.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         LF.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         RB.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         RF.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        Intakel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        Intaker.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        Shooter.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        Intake.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
 
-        Shooterl.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        Shooterr.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        Shooter.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        Intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         telemetry.addData("Status", "Initialized");
         telemetry.update();
@@ -82,16 +75,15 @@ public class KnightShiftTeleop extends LinearOpMode {
         waitForStart();
         runtime.reset();
 
-        // Initialize custom PID controller
         BasicPIDController shooterPID = new BasicPIDController(shooterP, shooterI, shooterD);
+        BasicPIDController intakePID = new BasicPIDController(intakeP, intakeI, intakeD);
 
         while (opModeIsActive()) {
-            // Update PID gains from Dashboard
             shooterPID.setPID(shooterP, shooterI, shooterD);
+            intakePID.setPID(intakeP, intakeI, intakeD);
 
-            intakeMethod();
+            intakeMethod(intakePID);
             shooterMethod(shooterPID);
-            feed();
 
             double forward = -gamepad1.left_stick_y;
             double strafe = gamepad1.left_stick_x;
@@ -120,61 +112,59 @@ public class KnightShiftTeleop extends LinearOpMode {
             RF.setPower(rfPower);
 
             telemetry.addData("Run Time", runtime);
-            telemetry.addData("Shooter Target Vel", targetShooterVelocity);
-            telemetry.addData("Shooter Left Vel", Shooterl.getVelocity());
-            telemetry.addData("Shooter Right Vel", Shooterr.getVelocity());
-            telemetry.addData("Arm degree", Arm.getPosition());
-            telemetry.addData("Intended Arm Degree", armTarget);
+            telemetry.addData("Shooter Target RPM", toRpm(targetShooterVelocity, SHOOTER_TICKS_PER_REV));
+            telemetry.addData("Shooter RPM", toRpm(Shooter.getVelocity(), SHOOTER_TICKS_PER_REV));
+            telemetry.addData("Intake Target RPM", toRpm(targetIntakeVelocity, INTAKE_TICKS_PER_REV));
+            telemetry.addData("Intake RPM", toRpm(Intake.getVelocity(), INTAKE_TICKS_PER_REV));
             telemetry.update();
         }
     }
 
-    private void feed() {
-        if (gamepad1.left_trigger > 1) {
-            armTarget = 0.5;
-        }
-        else{
-            armTarget = 0.0;
-        }
-        Arm.setPosition(armTarget);
-    }
-
     private void shooterMethod(BasicPIDController pid) {
         if (gamepad1.b) {
-            targetShooterVelocity = 2500.0;
-        } else if (gamepad1.left_trigger > 1) {
-            targetShooterVelocity = -2500.0;
+            targetShooterVelocity = toTicksPerSecond(SHOOTER_RPM, SHOOTER_TICKS_PER_REV);
         } else {
             targetShooterVelocity = 0.0;
         }
 
-        // Calculate PID + Feedforward output based on current velocity
-        double currentVelL = Shooterl.getVelocity();
-        double currentVelR = Shooterr.getVelocity();
-
-        double powerL = pid.update(targetShooterVelocity, currentVelL) + (targetShooterVelocity * shooterF);
-        double powerR = pid.update(targetShooterVelocity, currentVelR) + (targetShooterVelocity * shooterF);
-
-        Shooterl.setPower(powerL);
-        Shooterr.setPower(powerR);
-    }
-
-    private void intakeMethod() {
-        if (gamepad1.right_trigger > 0 ) {
-            irPower = 1.0;
-            ilPower = 1.0;
-        } else if (gamepad1.b) {
-            irPower = -1.0;
-            ilPower = -1.0;
-        } else {
-            irPower = 0.0;
-            ilPower = 0.0;
+        if (targetShooterVelocity == 0.0) {
+            pid.reset();
+            Shooter.setPower(0.0);
+            return;
         }
-        Intakel.setPower(ilPower);
-        Intaker.setPower(irPower);
+
+        double power = pid.update(targetShooterVelocity, Shooter.getVelocity()) + (targetShooterVelocity * shooterF);
+        Shooter.setPower(Range.clip(power, -1.0, 1.0));
     }
 
-    // Custom PID Controller helper class
+    private void intakeMethod(BasicPIDController pid) {
+        double intakeVelocity = toTicksPerSecond(INTAKE_RPM, INTAKE_TICKS_PER_REV);
+        if (gamepad1.right_trigger > 0.1) {
+            targetIntakeVelocity = intakeVelocity;
+        } else if (gamepad1.left_trigger > 0.1) {
+            targetIntakeVelocity = -intakeVelocity;
+        } else {
+            targetIntakeVelocity = 0.0;
+        }
+
+        if (targetIntakeVelocity == 0.0) {
+            pid.reset();
+            Intake.setPower(0.0);
+            return;
+        }
+
+        double power = pid.update(targetIntakeVelocity, Intake.getVelocity()) + (targetIntakeVelocity * intakeF);
+        Intake.setPower(Range.clip(power, -1.0, 1.0));
+    }
+
+    private static double toTicksPerSecond(double rpm, double ticksPerRev) {
+        return rpm * ticksPerRev / 60.0;
+    }
+
+    private static double toRpm(double ticksPerSecond, double ticksPerRev) {
+        return ticksPerSecond * 60.0 / ticksPerRev;
+    }
+
     public static class BasicPIDController {
         private double Kp, Ki, Kd;
         private double lastError = 0;
@@ -191,6 +181,12 @@ public class KnightShiftTeleop extends LinearOpMode {
             this.Kp = Kp;
             this.Ki = Ki;
             this.Kd = Kd;
+        }
+
+        public void reset() {
+            integral = 0;
+            lastError = 0;
+            timer.reset();
         }
 
         public double update(double reference, double state) {
