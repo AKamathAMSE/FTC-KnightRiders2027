@@ -121,8 +121,11 @@ public class KnightShiftTeleop extends LinearOpMode {
     }
 
     private void shooterMethod(BasicPIDController pid) {
-        if (gamepad1.b) {
-            targetShooterVelocity = toTicksPerSecond(SHOOTER_RPM, SHOOTER_TICKS_PER_REV);
+        double shooterVelocity = toTicksPerSecond(SHOOTER_RPM, SHOOTER_TICKS_PER_REV);
+        if (gamepad1.left_trigger > 0.1) {
+            targetShooterVelocity = shooterVelocity;
+        } else if (gamepad1.left_bumper) {
+            targetShooterVelocity = -shooterVelocity;
         } else {
             targetShooterVelocity = 0.0;
         }
@@ -141,7 +144,7 @@ public class KnightShiftTeleop extends LinearOpMode {
         double intakeVelocity = toTicksPerSecond(INTAKE_RPM, INTAKE_TICKS_PER_REV);
         if (gamepad1.right_trigger > 0.1) {
             targetIntakeVelocity = intakeVelocity;
-        } else if (gamepad1.left_trigger > 0.1) {
+        } else if (gamepad1.right_bumper) {
             targetIntakeVelocity = -intakeVelocity;
         } else {
             targetIntakeVelocity = 0.0;
